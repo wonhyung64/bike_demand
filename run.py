@@ -36,8 +36,6 @@ sns.histplot(train_df["count"], kde=True, stat="density", ax=ax)
 print(f'Skewness: {train_df["count"].skew()}')
 print(f'Kurtosis: {train_df["count"].kurt()}')
 
-train_df.describe()
-
 
 #%% eda
 train_df["year"] = train_df["datetime"].dt.year
@@ -126,6 +124,7 @@ X = train_df[[
     ]]
 Y = train_df["count_log"]
 
+
 test_df = pd.get_dummies(test_df, columns=["weather"], prefix="weather")
 test_df = pd.get_dummies(test_df, columns=["season"], prefix="season")
 
@@ -134,6 +133,12 @@ test_X = test_df[[
     "weather_1", "weather_2", "weather_3", "weather_4", 
     "season_1", "season_2", "season_3", "season_4", 
     ]]
+
+X.describe()
+scaler = MinMaxScaler()
+scaler.fit(X)
+X = scaler.transform(X)
+test_X = scaler.transform(test_X)
 
 
 #%% modeling
@@ -150,30 +155,26 @@ def calculate_metric(pred, true):
 
 res = {}
 for max_depth in tqdm(range(2, 10)):
-    metrics = []
-    for seed in range(10):
-        train_x, valid_x, train_y, valid_y = train_test_split(X, Y, random_state=seed)
+    for n_estimators in [50, 100, 150]:
+        metrics = []
+        for seed in range(10):
+            train_x, valid_x, train_y, valid_y = train_test_split(X, Y, random_state=seed)
 
-        gboost = GradientBoostingRegressor(max_depth=max_depth)
-        gboost.fit(train_x, train_y)
-        pred = gboost.predict(valid_x)
-        metric = calculate_metric(pred, valid_y)
-        metrics.append(metric)
-    
-    mean_metrics = np.mean(metrics)
-    res[mean_metrics] = max_depth
+            gboost = GradientBoostingRegressor(max_depth=max_depth, n_estimators=n_estimators)
+            gboost.fit(train_x, train_y)
+            pred = gboost.predict(valid_x)
+            metric = calculate_metric(np.exp(pred), np.exp(valid_y))
+            metrics.append(metric)
+        
+        mean_metrics = np.mean(metrics)
+        res[mean_metrics] = [max_depth, n_estimators]
         
 metrics = list(res.keys())
 metric = min(metrics)
-optimal_max_depth = res.get(metric)
+optimal_max_depth, optimal_n_estimators = res.get(metric)
 
-gboost = GradientBoostingRegressor(max_depth=optimal_max_depth)
+gboost = GradientBoostingRegressor(max_depth=optimal_max_depth, n_estimators=optimal_n_estimators)
 gboost.fit(X, Y)
 pred_Y = gboost.predict(test_X)
 submit_df["count"] = np.exp(pred_Y)
 submit_df.to_csv("/Users/wonhyung64/Downloads/submission.csv", index=False)
-
-
-
-
-# %%
